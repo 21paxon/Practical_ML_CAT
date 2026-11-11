@@ -433,3 +433,398 @@ ggsave(
   height = 5,
   dpi = 300
 )
+
+#TASK 3: FEATURE PREPARATION AND ENGINEERING
+#Step 3.1: Remove unnecessary columns
+
+# Specify columns that must not be used as predictors
+excluded_columns <- c(
+  "encounter_id",
+  "patient_id",
+  "hospital_id",
+  "icu_id",
+  "Unnamed: 83",
+  "apache_4a_hospital_death_prob",
+  "apache_4a_icu_death_prob"
+)
+
+# Also identify any APACHE predicted death-probability
+# columns with slightly different names
+apache_probability_columns <- grep(
+  "apache.*(death.*prob|prob.*death)",
+  names(train_data),
+  ignore.case = TRUE,
+  value = TRUE
+)
+
+# Identify unnamed columns
+unnamed_columns <- grep(
+  "^Unnamed",
+  names(train_data),
+  ignore.case = TRUE,
+  value = TRUE
+)
+
+# Combine all columns to exclude
+columns_to_remove <- unique(c(
+  excluded_columns,
+  apache_probability_columns,
+  unnamed_columns
+))
+
+# Keep only excluded columns that actually exist
+columns_to_remove <- intersect(
+  columns_to_remove,
+  names(train_data)
+)
+
+# Remove excluded columns from training data
+train_data <- train_data[
+  , !(names(train_data) %in% columns_to_remove),
+  drop = FALSE
+]
+
+# Remove the same columns from testing data
+test_data <- test_data[
+  , !(names(test_data) %in% columns_to_remove),
+  drop = FALSE
+]
+
+# Display removed columns
+print("Columns removed:")
+print(columns_to_remove)
+
+# Display the new dimensions
+print("Training data dimensions:")
+print(dim(train_data))
+
+print("Testing data dimensions:")
+print(dim(test_data))
+
+#Step 3.2: Convert variables into appropriate data types
+
+# 3.2 Convert the target variable into a factor
+
+# Define the outcome categories
+train_data$hospital_death <- factor(
+  train_data$hospital_death,
+  levels = c("Survived", "Died")
+)
+
+test_data$hospital_death <- factor(
+  test_data$hospital_death,
+  levels = c("Survived", "Died")
+)
+
+# Convert character predictors into factors
+# These are categorical variables
+character_columns <- names(train_data)[
+  sapply(train_data, is.character)
+]
+
+for (column in character_columns) {
+
+  train_data[[column]] <- as.factor(
+    train_data[[column]]
+  )
+
+  test_data[[column]] <- factor(
+    test_data[[column]],
+    levels = levels(train_data[[column]])
+  )
+}
+
+# Display the updated data structure
+str(train_data)
+#Step 3.3: Complete missing-value preparation
+
+# 3.3 Handle remaining missing values
+
+# Identify all predictor columns except the target
+predictor_columns <- setdiff(
+  names(train_data),
+  "hospital_death"
+)
+
+# Identify columns that contain no observed training values
+all_missing_columns <- predictor_columns[
+  sapply(
+    train_data[predictor_columns],
+    function(x) all(is.na(x))
+  )
+]
+
+# Remove completely missing predictors
+train_data <- train_data[
+  , !(names(train_data) %in% all_missing_columns),
+  drop = FALSE
+]
+
+test_data <- test_data[
+  , !(names(test_data) %in% all_missing_columns),
+  drop = FALSE
+]
+
+# Update predictor list
+predictor_columns <- setdiff(
+  names(train_data),
+  "hospital_death"
+)
+
+# Store training imputation values
+imputation_values <- list()
+
+# Process each predictor
+for (column in predictor_columns) {
+
+  # Numerical variables use median imputation
+  if (is.numeric(train_data[[column]])) {
+
+    # Calculate median using training data only
+    fill_value <- median(
+      train_data[[column]],
+      na.rm = TRUE
+    )
+
+    # Store the calculated median
+    imputation_values[[column]] <- fill_value
+
+    # Replace missing values in training data
+    train_data[[column]][
+      is.na(train_data[[column]])
+    ] <- fill_value
+
+    # Apply the same median to testing data
+    test_data[[column]][
+      is.na(test_data[[column]])
+    ] <- fill_value
+
+  } else {
+
+    # Categorical variables use mode imputation
+    fill_value <- calculate_mode(
+      as.character(train_data[[column]])
+    )
+
+    # Store the training mode
+    imputation_values[[column]] <- fill_value
+
+    # Replace missing values in training data
+    train_data[[column]][
+      is.na(train_data[[column]])
+    ] <- fill_value
+
+    # Apply the same mode to testing data
+    test_data[[column]][
+      is.na(test_data[[column]])
+    ] <- fill_value
+  }
+}
+
+# Display remaining missing values
+print("Remaining missing values in training data:")
+print(sum(is.na(train_data)))
+
+print("Remaining missing values in testing data:")
+print(sum(is.na(test_data)))
+
+#Step 3.4: Create at least two meaningful features
+
+# 3.4 Feature engineering
+
+# Create age groups in the training dataset
+train_data$age_group <- cut(
+  train_data$age,
+  breaks = c(-Inf, 40, 60, Inf),
+  labels = c("Young", "Middle_Aged", "Older"),
+  right = FALSE
+)
+
+# Create the same age groups in the testing dataset
+test_data$age_group <- cut(
+  test_data$age,
+  breaks = c(-Inf, 40, 60, Inf),
+  labels = c("Young", "Middle_Aged", "Older"),
+  right = FALSE
+)
+
+# Display age group frequencies
+print("Training age group distribution:")
+print(table(train_data$age_group))
+
+
+# Create BMI categories in training data
+train_data$bmi_category <- cut(
+  train_data$bmi,
+  breaks = c(-Inf, 18.5, 25, 30, Inf),
+  labels = c(
+    "Underweight",
+    "Normal",
+    "Overweight",
+    "Obese"
+  ),
+  right = FALSE
+)
+
+# Create the same BMI categories in testing data
+test_data$bmi_category <- cut(
+  test_data$bmi,
+  breaks = c(-Inf, 18.5, 25, 30, Inf),
+  labels = c(
+    "Underweight",
+    "Normal",
+    "Overweight",
+    "Obese"
+  ),
+  right = FALSE
+)
+
+# Display BMI category frequencies
+print("Training BMI category distribution:")
+print(table(train_data$bmi_category))
+
+
+# Display the first ten records of the new features
+head(
+  train_data[
+    c("age", "age_group", "bmi", "bmi_category")
+  ],
+  10
+)
+
+# Display the updated training data structure
+str(train_data)
+
+#Step 3.5: Scale numerical predictors
+#Step 3.5.1: Identify numerical predictors
+
+# Identify numerical predictors in training data
+numeric_predictors <- names(train_data)[
+  sapply(train_data, is.numeric)
+]
+
+# Remove the target variable if present
+numeric_predictors <- setdiff(
+  numeric_predictors,
+  "hospital_death"
+)
+
+# Display numerical predictors
+print("Numerical predictors:")
+print(numeric_predictors)
+
+#Step 3.5.2: Calculate scaling parameters from training data
+
+# Calculate the mean of each numerical predictor
+# using training data only
+scaling_means <- sapply(
+  train_data[numeric_predictors],
+  mean,
+  na.rm = TRUE
+)
+
+# Calculate standard deviation using training data only
+scaling_sds <- sapply(
+  train_data[numeric_predictors],
+  sd,
+  na.rm = TRUE
+)
+
+# Replace zero or invalid standard deviations with 1
+# This prevents division by zero
+scaling_sds[
+  is.na(scaling_sds) | scaling_sds == 0
+] <- 1
+
+# Display scaling parameters
+print("Training means:")
+print(scaling_means)
+
+print("Training standard deviations:")
+print(scaling_sds)
+#Step 3.5.3: Apply scaling to training and testing data
+
+# Create copies of the datasets for scaled modelling
+train_scaled <- train_data
+test_scaled <- test_data
+
+# Standardise numerical training predictors
+train_scaled[numeric_predictors] <- as.data.frame(
+  scale(
+    train_data[numeric_predictors],
+    center = scaling_means,
+    scale = scaling_sds
+  )
+)
+
+# Apply the SAME training parameters to testing predictors
+test_scaled[numeric_predictors] <- as.data.frame(
+  scale(
+    test_data[numeric_predictors],
+    center = scaling_means,
+    scale = scaling_sds
+  )
+)
+
+# Display the first six scaled records
+head(train_scaled)
+head(test_scaled)
+#Step 3.6: Verify the prepared datasets
+
+# 3.6 Final verification of prepared datasets
+
+# Check training dataset dimensions
+print("Prepared training dataset:")
+print(dim(train_data))
+
+# Check testing dataset dimensions
+print("Prepared testing dataset:")
+print(dim(test_data))
+
+# Check whether both datasets have identical columns
+print("Do training and testing columns match?")
+print(identical(names(train_data), names(test_data)))
+
+# Check missing values after imputation
+print("Missing values in training data:")
+print(sum(is.na(train_data)))
+
+print("Missing values in testing data:")
+print(sum(is.na(test_data)))
+
+# Check the target variable distribution
+print("Training outcome distribution:")
+print(table(train_data$hospital_death))
+
+print("Testing outcome distribution:")
+print(table(test_data$hospital_death))
+
+# Confirm that the two engineered features exist
+print("Newly engineered features:")
+print(c("age_group", "bmi_category"))
+
+# Display the final prepared dataset structure
+str(train_data)
+
+identical(names(train_data), names(test_data))
+sum(is.na(train_data))
+sum(is.na(test_data))
+
+
+# ==========================================================
+# TASK 4: CLASSIFICATION MODEL DEVELOPMENT
+
+# Install required packages if not already installed
+# Run installation commands only when necessary
+
+# install.packages("caret")
+# install.packages("randomForest")
+# install.packages("pROC")
+
+# Load required packages
+library(caret)
+library(randomForest)
+library(pROC)
+
+# Set random seed for reproducibility
+set.seed(2026)
