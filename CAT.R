@@ -828,3 +828,290 @@ library(pROC)
 
 # Set random seed for reproducibility
 set.seed(2026)
+#Step 4.2: Verify the stratified training and testing split
+
+# 4.2 Verify the existing stratified split
+
+# Display training dataset dimensions
+print("Training dataset dimensions:")
+print(dim(train_data))
+
+# Display testing dataset dimensions
+print("Testing dataset dimensions:")
+print(dim(test_data))
+
+# Calculate training class frequencies
+training_frequency <- table(train_data$hospital_death)
+
+# Calculate testing class frequencies
+testing_frequency <- table(test_data$hospital_death)
+
+# Display training class proportions
+print("Training class proportions:")
+print(round(prop.table(training_frequency) * 100, 2))
+
+# Display testing class proportions
+print("Testing class proportions:")
+print(round(prop.table(testing_frequency) * 100, 2))
+
+# Display training and testing percentages
+print("Training percentage:")
+print(round(nrow(train_data) / nrow(data) * 100, 2))
+
+print("Testing percentage:")
+print(round(nrow(test_data) / nrow(data) * 100, 2))
+
+
+#Step 4.3: Prepare the target variable for classification
+
+# 4.3 Set the target factor levels
+
+# Put Died first because it is our positive class
+train_data$hospital_death <- factor(
+  train_data$hospital_death,
+  levels = c("Died", "Survived")
+)
+
+test_data$hospital_death <- factor(
+  test_data$hospital_death,
+  levels = c("Died", "Survived")
+)
+
+# Update the scaled datasets as well
+train_scaled$hospital_death <- factor(
+  train_scaled$hospital_death,
+  levels = c("Died", "Survived")
+)
+
+test_scaled$hospital_death <- factor(
+  test_scaled$hospital_death,
+  levels = c("Died", "Survived")
+)
+
+# Verify target classes
+levels(train_data$hospital_death)
+
+# Display class frequencies
+table(train_data$hospital_death)
+#Step 4.4: Develop Model 1 — Logistic Regression
+#Step 4.4.1: Prepare predictors and outcome
+
+# 4.4 Logistic Regression
+
+# Remove hospital_death from the predictor variables
+# The target must not be used as an input predictor
+logistic_train_x <- train_scaled[
+  , setdiff(names(train_scaled), "hospital_death"),
+  drop = FALSE
+]
+
+logistic_test_x <- test_scaled[
+  , setdiff(names(test_scaled), "hospital_death"),
+  drop = FALSE
+]
+
+# Extract target variable
+logistic_train_y <- train_scaled$hospital_death
+
+logistic_test_y <- test_scaled$hospital_death
+
+# Display the number of predictors
+ncol(logistic_train_x)
+#Step 4.4.2: Configure cross-validation
+
+# Configure three-fold cross-validation
+logistic_control <- trainControl(
+
+  # Use three-fold cross-validation
+  method = "cv",
+
+  # Divide training data into three folds
+  number = 3,
+
+  # Calculate class probabilities
+  classProbs = TRUE,
+
+  # Use ROC-AUC for model evaluation
+  summaryFunction = twoClassSummary,
+
+  # Save cross-validation predictions
+  savePredictions = "final"
+)
+#Step 4.4.3: Train Logistic Regression
+
+# Train Logistic Regression using cross-validation
+set.seed(2026)
+
+logistic_model <- train(
+
+  # Predictor variables
+  x = logistic_train_x,
+
+  # Target variable
+  y = logistic_train_y,
+
+  # Select Logistic Regression algorithm
+  method = "glm",
+
+  # Specify binomial classification
+  family = binomial(),
+
+  # Cross-validation configuration
+  trControl = logistic_control,
+
+  # Select model using ROC-AUC
+  metric = "ROC"
+)
+
+# Display model results
+print(logistic_model)
+
+# Display model details
+summary(logistic_model$finalModel)
+
+#Step 4.5: Develop Model 2 — Random Forest
+#Step 4.5.1: Prepare Random Forest predictors
+
+# 4.5 Random Forest classification
+
+# Remove the target variable from training predictors
+rf_train_x <- train_data[
+  , setdiff(names(train_data), "hospital_death"),
+  drop = FALSE
+]
+
+# Remove the target variable from testing predictors
+rf_test_x <- test_data[
+  , setdiff(names(test_data), "hospital_death"),
+  drop = FALSE
+]
+
+# Extract training target
+rf_train_y <- train_data$hospital_death
+
+# Extract testing target
+rf_test_y <- test_data$hospital_death
+
+# Display number of predictors
+ncol(rf_train_x)
+
+#Step 4.5.2: Select parameters for Random Forest
+
+# Calculate the number of predictor variables
+number_of_predictors <- ncol(rf_train_x)
+
+# Generate three candidate mtry values
+mtry_values <- unique(
+  pmax(
+    1,
+    pmin(
+      number_of_predictors,
+      round(c(
+        sqrt(number_of_predictors) / 2,
+        sqrt(number_of_predictors),
+        sqrt(number_of_predictors) * 2
+      ))
+    )
+  )
+)
+
+# Create the Random Forest tuning grid
+rf_grid <- expand.grid(
+  mtry = mtry_values
+)
+
+# Display the parameter values to be tested
+print("Random Forest mtry values:")
+print(rf_grid)
+
+#Step 4.5.3: Configure cross-validation for Random Forest
+
+# Configure Random Forest cross-validation
+rf_control <- trainControl(
+
+  # Use three-fold cross-validation
+  method = "cv",
+
+  # Use three folds
+  number = 3,
+
+  # Calculate class probabilities
+  classProbs = TRUE,
+
+  # Evaluate using ROC-AUC
+  summaryFunction = twoClassSummary,
+
+  # Save validation predictions
+  savePredictions = "final"
+)
+#Step 4.5.4: Train the Random Forest model
+
+# Train Random Forest using three-fold cross-validation
+set.seed(2026)
+
+rf_model <- train(
+
+  # Training predictors
+  x = rf_train_x,
+
+  # Training outcome
+  y = rf_train_y,
+
+  # Random Forest algorithm
+  method = "rf",
+
+  # Test different mtry values
+  tuneGrid = rf_grid,
+
+  # Number of trees
+  ntree = 100,
+
+  # Calculate variable importance
+  importance = TRUE,
+
+  # Cross-validation settings
+  trControl = rf_control,
+
+  # Select model based on ROC-AUC
+  metric = "ROC"
+)
+
+# Display Random Forest model results
+print(rf_model)
+
+# Display the selected mtry value
+print("Best Random Forest parameter:")
+print(rf_model$bestTune)
+
+# Display cross-validation results
+print(rf_model$results)
+#Step 4.6: Compare cross-validation results
+
+# 4.6 Compare cross-validation performance
+
+# Extract Logistic Regression ROC results
+logistic_roc <- max(logistic_model$results$ROC)
+
+# Extract the best Random Forest ROC result
+rf_roc <- max(rf_model$results$ROC)
+
+# Create a comparison table
+cross_validation_results <- data.frame(
+
+  Model = c(
+    "Logistic Regression",
+    "Random Forest"
+  ),
+
+  Cross_Validation_ROC_AUC = c(
+    logistic_roc,
+    rf_roc
+  )
+)
+
+# Display comparison
+print("Cross-validation model comparison:")
+
+print(
+  cross_validation_results
+)
