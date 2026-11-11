@@ -272,3 +272,164 @@ test_data <- data[-train_index, ]
 # Display the dimensions of both datasets
 dim(train_data)
 dim(test_data)
+
+#Step5: Median imputation for numerical variables
+
+# Calculate the median age using training data only
+age_median <- median(
+  train_data$age,
+  na.rm = TRUE
+)
+
+# Replace missing age values in training data
+train_data$age[
+  is.na(train_data$age)
+] <- age_median
+
+# Replace missing age values in testing data
+# using the training median
+test_data$age[
+  is.na(test_data$age)
+] <- age_median
+
+# Display the median used for imputation
+print("Training median age:")
+print(age_median)
+
+#Step6: Mode imputation for categorical variables
+
+# Define a function to calculate the mode
+calculate_mode <- function(x) {
+
+  # Remove missing values before calculating the mode
+  x <- x[!is.na(x)]
+
+  # Find the unique values
+  unique_values <- unique(x)
+
+  # Count the frequency of each value
+  frequencies <- tabulate(
+    match(x, unique_values)
+  )
+
+  # Return the most frequently occurring value
+  unique_values[which.max(frequencies)]
+}
+
+# Calculate the mode of ethnicity using training data
+ethnicity_mode <- calculate_mode(
+  train_data$ethnicity
+)
+
+# Replace missing ethnicity values in training data
+train_data$ethnicity[
+  is.na(train_data$ethnicity)
+] <- ethnicity_mode
+
+# Replace missing ethnicity values in testing data
+# using the training mode
+test_data$ethnicity[
+  is.na(test_data$ethnicity)
+] <- ethnicity_mode
+
+# Display the selected mode
+print("Training ethnicity mode:")
+print(ethnicity_mode)
+
+#Step7: Investigate outliers
+#Step7.1: Create an outlier detection function
+
+# Define a function to detect outliers using IQR
+detect_outliers <- function(x) {
+
+  # Remove missing values
+  x <- x[!is.na(x)]
+
+  # Calculate first quartile
+  Q1 <- quantile(x, 0.25)
+
+  # Calculate third quartile
+  Q3 <- quantile(x, 0.75)
+
+  # Calculate interquartile range
+  IQR_value <- IQR(x)
+
+  # Calculate lower boundary
+  lower_bound <- Q1 - 1.5 * IQR_value
+
+  # Calculate upper boundary
+  upper_bound <- Q3 + 1.5 * IQR_value
+
+  # Identify outliers
+  outliers <- x[
+    x < lower_bound | x > upper_bound
+  ]
+
+  # Return outlier information
+  return(list(
+    Q1 = Q1,
+    Q3 = Q3,
+    IQR = IQR_value,
+    Lower_Bound = lower_bound,
+    Upper_Bound = upper_bound,
+    Outlier_Count = length(outliers)
+  ))
+}
+#step7.2: Investigate age outliers
+
+# Investigate outliers in patient age
+age_outliers <- detect_outliers(data$age)
+
+# Display age outlier results
+print("Age outlier analysis:")
+print(age_outliers)
+#step7.3: Investigate BMI outliers
+
+# Investigate outliers in patient BMI
+bmi_outliers <- detect_outliers(data$bmi)
+
+# Display BMI outlier results
+print("BMI outlier analysis:")
+print(bmi_outliers)
+
+#step7.4: Create boxplots
+
+# Create boxplot for patient age
+ggplot(data, aes(y = age)) +
+
+  geom_boxplot(fill = "lightblue") +
+
+  labs(
+    title = "Boxplot of Patient Age",
+    y = "Age (Years)"
+  ) +
+
+  theme_minimal()
+
+# Save age boxplot
+ggsave(
+  "plots/age_boxplot.png",
+  width = 7,
+  height = 5,
+  dpi = 300
+)
+
+# Create boxplot for patient BMI
+ggplot(data, aes(y = bmi)) +
+
+  geom_boxplot(fill = "lightgreen") +
+
+  labs(
+    title = "Boxplot of Patient BMI",
+    y = "Body Mass Index (BMI)"
+  ) +
+
+  theme_minimal()
+
+# Save BMI boxplot
+ggsave(
+  "plots/bmi_boxplot.png",
+  width = 7,
+  height = 5,
+  dpi = 300
+)
